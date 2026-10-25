@@ -156,7 +156,8 @@ function flagHtml(uf){
 
 function renderMap(){
   const g = $('map'); g.innerHTML='';
-  Object.keys(UFS).sort((a,b)=>(a==='zz')-(b==='zz') || UFS[a].localeCompare(UFS[b],'pt-BR')).forEach(uf=>{
+  const pst = u => data[u] ? data[u].pst : -1;   // sem dados vai para o fim
+  Object.keys(UFS).sort((a,b)=>pst(b)-pst(a) || UFS[a].localeCompare(UFS[b],'pt-BR')).forEach(uf=>{
     const d = data[uf];
     const b = document.createElement('button');
     b.className = 'strip'+(selected===uf?' sel':'');
