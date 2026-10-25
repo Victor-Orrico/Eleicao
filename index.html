@@ -29,16 +29,19 @@ h2{font-size:1rem;margin:0 0 12px}
 .bar{height:14px;border-radius:7px;background:var(--bd);overflow:hidden;margin-top:4px}
 .bar>div{height:100%;transition:width .6s}
 .badge{background:var(--ok);color:#fff;font-size:.7rem;padding:2px 7px;border-radius:10px;margin-left:6px;vertical-align:middle}
-.grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
-.tile{border:1px solid var(--bd);background:var(--bg);border-radius:8px;padding:6px 4px;text-align:center;cursor:pointer;font:inherit;color:inherit;position:relative;overflow:hidden;min-height:58px}
-.tile:hover,.tile:focus-visible{outline:2px solid var(--c1)}
-.tile.sel{outline:2px solid var(--tx)}
-.tile b{display:block;font-size:.95rem}
-.tile span{font-size:.7rem;color:var(--mut)}
-.tile i{position:absolute;left:0;bottom:0;height:5px;background:var(--ok);display:block}
-.tile.lead0{border-bottom:3px solid var(--c0)}
-.tile.lead1{border-bottom:3px solid var(--c1)}
-.empty{visibility:hidden}
+.list{display:flex;flex-direction:column;gap:6px;max-height:640px;overflow-y:auto;padding-right:2px}
+.strip{display:grid;grid-template-columns:40px 1fr auto;gap:2px 12px;align-items:center;border:1px solid var(--bd);border-left:5px solid var(--bd);background:var(--bg);border-radius:8px;padding:8px 12px;cursor:pointer;font:inherit;color:inherit;text-align:left;width:100%}
+.strip:hover,.strip:focus-visible{outline:2px solid var(--c1)}
+.strip.sel{outline:2px solid var(--tx)}
+.strip.lead0{border-left-color:var(--c0)}
+.strip.lead1{border-left-color:var(--c1)}
+.flag{grid-row:1/3;width:40px;height:28px;border-radius:3px;border:1px solid var(--bd);display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;overflow:hidden;background:var(--card)}
+.flag img{width:100%;height:100%;object-fit:cover;display:block}
+.strip .nm2{font-weight:600;font-size:.95rem}
+.strip .pct2{font-weight:700;text-align:right}
+.strip .sub{grid-column:2/4;display:flex;justify-content:space-between;gap:8px;font-size:.75rem;color:var(--mut)}
+.mini{grid-column:2/4;height:5px;border-radius:3px;background:var(--bd);overflow:hidden}
+.mini>div{height:100%;background:var(--ok);transition:width .6s}
 .tools{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
 button.btn{font:inherit;padding:6px 12px;border-radius:8px;border:1px solid var(--bd);background:var(--card);color:var(--tx);cursor:pointer}
 .legend{font-size:.75rem;color:var(--mut);margin-top:8px}
@@ -55,8 +58,8 @@ footer{max-width:1100px;margin:0 auto;padding:0 16px 24px;color:var(--mut);font-
   <section class="card" id="detail"></section>
   <section class="card">
     <h2>Urnas apuradas por estado <span class="muted">(clique para ver o resultado)</span></h2>
-    <div class="grid" id="map"></div>
-    <div class="legend">Barra verde = % de seções apuradas · Linha colorida na base = candidato à frente no estado</div>
+    <div class="list" id="map"></div>
+    <div class="legend">Barra verde = % de seções apuradas · Faixa colorida à esquerda = candidato à frente no estado</div>
     <div class="tools"><button class="btn" id="brBtn">Ver Brasil</button></div>
     <div id="msg"></div>
   </section>
@@ -143,17 +146,26 @@ function setStatus(ok,txt){
   $('upd').textContent = txt || (d ? `TSE: ${d.dg||''} ${d.hg||''} · verificado às ${new Date().toLocaleTimeString('pt-BR')}` : 'Carregando…');
 }
 
+// Bandeiras: Wikimedia Commons. Se alguma imagem não carregar, aparece a sigla no lugar.
+const FLAGFILE = {ac:'do Acre',al:'de Alagoas',ap:'do Amapá',am:'do Amazonas',ba:'da Bahia',ce:'do Ceará',df:'do Distrito Federal (Brasil)',es:'do Espírito Santo',go:'de Goiás',ma:'do Maranhão',mt:'de Mato Grosso',ms:'de Mato Grosso do Sul',mg:'de Minas Gerais',pa:'do Pará',pb:'da Paraíba',pr:'do Paraná',pe:'de Pernambuco',pi:'do Piauí',rj:'do Rio de Janeiro',rn:'do Rio Grande do Norte',rs:'do Rio Grande do Sul',ro:'de Rondônia',rr:'de Roraima',sc:'de Santa Catarina',sp:'de São Paulo',se:'de Sergipe',to:'do Tocantins'};
+function flagHtml(uf){
+  if(!FLAGFILE[uf]) return '<span class="flag">🌐</span>';
+  const f = encodeURIComponent('Bandeira '+FLAGFILE[uf]+'.svg');
+  return `<span class="flag"><img loading="lazy" alt="Bandeira ${UFS[uf]}" src="https://commons.wikimedia.org/wiki/Special:FilePath/${f}?width=80" onerror="this.replaceWith(document.createTextNode('${uf.toUpperCase()}'))"></span>`;
+}
+
 function renderMap(){
   const g = $('map'); g.innerHTML='';
-  Object.keys(UFS).forEach(uf=>{
-    const [c,r] = POS[uf];
+  Object.keys(UFS).sort((a,b)=>(a==='zz')-(b==='zz') || UFS[a].localeCompare(UFS[b],'pt-BR')).forEach(uf=>{
     const d = data[uf];
     const b = document.createElement('button');
-    b.className = 'tile'+(selected===uf?' sel':'');
-    b.style.gridColumn=c; b.style.gridRow=r;
-    b.title = UFS[uf];
-    if(d && d.cands.length && d.vv>0){ const top=[...d.cands].sort((a,b)=>b.votos-a.votos)[0]; b.classList.add('lead'+(top.i%2)); }
-    b.innerHTML = `<b>${uf.toUpperCase()}</b><span>${d?pct(d.pst,1):'—'}</span>${d?`<i style="width:${d.pst}%"></i>`:''}`;
+    b.className = 'strip'+(selected===uf?' sel':'');
+    let lead = 'Sem dados';
+    if(d && d.cands.length && d.vv>0){ const top=[...d.cands].sort((a,b)=>b.votos-a.votos)[0]; b.classList.add('lead'+(top.i%2)); lead='À frente: '+top.nome+' ('+pct(top.p,1)+')'; }
+    else if(d) lead='Apuração iniciando';
+    b.innerHTML = `${flagHtml(uf)}<span class="nm2">${UFS[uf]}</span><span class="pct2">${d?pct(d.pst,1):'—'}</span>
+      <span class="sub"><span>${lead}</span><span>${d?'urnas apuradas':''}</span></span>
+      <span class="mini"><div style="width:${d?d.pst:0}%"></div></span>`;
     b.onclick = ()=>{ selected=uf; render(); };
     g.appendChild(b);
   });
