@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Apuração 2º turno 2026 – Presidente</title>
+<style>
+:root{--bg:#f5f6f8;--card:#fff;--tx:#1b1f24;--mut:#6a7380;--bd:#dde1e7;--c0:#e08a00;--c1:#0f9d8a;--ok:#1a7f37;--err:#c0392b}
+@media (prefers-color-scheme:dark){:root{--bg:#12151a;--card:#1c2128;--tx:#e8ebef;--mut:#929ba8;--bd:#2d343d;--c0:#f0a030;--c1:#27c3ae}}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--tx)}
+header{padding:16px 20px;border-bottom:1px solid var(--bd);background:var(--card);display:flex;flex-wrap:wrap;gap:8px 20px;align-items:center;justify-content:space-between}
+h1{font-size:1.15rem;margin:0}
+.status{font-size:.85rem;color:var(--mut);display:flex;gap:8px;align-items:center}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--ok)}
+.dot.err{background:var(--err)}
+main{max-width:1100px;margin:0 auto;padding:16px;display:grid;grid-template-columns:1fr;gap:16px}
+@media(min-width:900px){main{grid-template-columns:1.05fr 1fr}}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:16px}
+h2{font-size:1rem;margin:0 0 12px}
+.prog{height:10px;border-radius:6px;background:var(--bd);overflow:hidden;margin:6px 0 4px}
+.prog>div{height:100%;background:var(--ok);transition:width .6s}
+.big{font-size:1.6rem;font-weight:700}
+.muted{color:var(--mut);font-size:.85rem}
+.cand{margin:14px 0}
+.cand .row{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.cand .nm{font-weight:600}
+.cand .pc{font-size:1.4rem;font-weight:700}
+.bar{height:14px;border-radius:7px;background:var(--bd);overflow:hidden;margin-top:4px}
+.bar>div{height:100%;transition:width .6s}
+.badge{background:var(--ok);color:#fff;font-size:.7rem;padding:2px 7px;border-radius:10px;margin-left:6px;vertical-align:middle}
+.grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.tile{border:1px solid var(--bd);background:var(--bg);border-radius:8px;padding:6px 4px;text-align:center;cursor:pointer;font:inherit;color:inherit;position:relative;overflow:hidden;min-height:58px}
+.tile:hover,.tile:focus-visible{outline:2px solid var(--c1)}
+.tile.sel{outline:2px solid var(--tx)}
+.tile b{display:block;font-size:.95rem}
+.tile span{font-size:.7rem;color:var(--mut)}
+.tile i{position:absolute;left:0;bottom:0;height:5px;background:var(--ok);display:block}
+.tile.lead0{border-bottom:3px solid var(--c0)}
+.tile.lead1{border-bottom:3px solid var(--c1)}
+.empty{visibility:hidden}
+.tools{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+button.btn{font:inherit;padding:6px 12px;border-radius:8px;border:1px solid var(--bd);background:var(--card);color:var(--tx);cursor:pointer}
+.legend{font-size:.75rem;color:var(--mut);margin-top:8px}
+#msg{color:var(--err);font-size:.85rem;margin-top:8px}
+footer{max-width:1100px;margin:0 auto;padding:0 16px 24px;color:var(--mut);font-size:.78rem}
+</style>
+</head>
+<body>
+<header>
+  <h1>Eleições 2026 · 2º turno · Presidente da República</h1>
+  <div class="status"><span class="dot" id="dot"></span><span id="upd">Carregando…</span></div>
+</header>
+<main>
+  <section class="card" id="detail"></section>
+  <section class="card">
+    <h2>Urnas apuradas por estado <span class="muted">(clique para ver o resultado)</span></h2>
+    <div class="grid" id="map"></div>
+    <div class="legend">Barra verde = % de seções apuradas · Linha colorida na base = candidato à frente no estado</div>
+    <div class="tools"><button class="btn" id="brBtn">Ver Brasil</button></div>
+    <div id="msg"></div>
+  </section>
+</main>
+<footer>Fonte: arquivos JSON de divulgação do TSE (resultados.tse.jus.br). Resultados parciais podem mudar durante a apuração. Para dados oficiais consulte sempre o TSE.</footer>
+
+<script>
+// ===== Configuração =====
+const SIM = new URLSearchParams(location.search).has('sim');   // ?sim=1 usa o ambiente de simulado do TSE
+const PROXY = '';          // se o navegador bloquear por CORS, coloque aqui a URL de um proxy (ex.: 'http://localhost:8787/?u=')
+const INTERVAL_MS = 12000; // atualização a cada 12 s
+const CFG = SIM
+  ? {base:'https://resultados-sim.tse.jus.br/simulado/simulado2026/ele2026', code:22410, ufs:['br','zz','rr','pe','df']}
+  : {base:'https://resultados.tse.jus.br/oficial/ele2026', code:6258, ufs:null};
+
+const UFS = {ac:'Acre',al:'Alagoas',ap:'Amapá',am:'Amazonas',ba:'Bahia',ce:'Ceará',df:'Distrito Federal',es:'Espírito Santo',go:'Goiás',ma:'Maranhão',mt:'Mato Grosso',ms:'Mato Grosso do Sul',mg:'Minas Gerais',pa:'Pará',pb:'Paraíba',pr:'Paraná',pe:'Pernambuco',pi:'Piauí',rj:'Rio de Janeiro',rn:'Rio Grande do Norte',rs:'Rio Grande do Sul',ro:'Rondônia',rr:'Roraima',sc:'Santa Catarina',sp:'São Paulo',se:'Sergipe',to:'Tocantins',zz:'Exterior'};
+// posição [coluna, linha] no mapa em blocos
+const POS = {rr:[3,1],ap:[5,1],am:[2,2],pa:[4,2],ma:[5,2],ce:[6,2],rn:[7,2],ac:[1,3],ro:[2,3],mt:[3,3],to:[4,3],pi:[5,3],pe:[6,3],pb:[7,3],ms:[3,4],go:[4,4],ba:[5,4],se:[6,4],al:[7,4],df:[4,5],mg:[5,5],es:[6,5],pr:[3,6],sp:[4,6],rj:[5,6],sc:[4,7],rs:[4,8],zz:[7,8]};
+
+const fmt = n => Number(n).toLocaleString('pt-BR');
+const pct = (n,d=2) => Number(n).toLocaleString('pt-BR',{minimumFractionDigits:d,maximumFractionDigits:d})+'%';
+const pad6 = n => String(n).padStart(6,'0');
+const $ = id => document.getElementById(id);
+
+const data = {};            // uf -> resultado já interpretado
+const lastIdg = {};         // uf -> idg do último arquivo
+const backoff = {};         // uf -> timestamp para tentar de novo (evita 404 repetidos, que o TSE pode bloquear)
+let selected = 'br';
+
+function urlFor(uf){
+  const u = `${CFG.base}/${CFG.code}/dados/${uf}/${uf}-c0001-e${pad6(CFG.code)}-u.json`;
+  return PROXY ? PROXY + encodeURIComponent(u) : u;
+}
+
+function parse(j){
+  const cands = [];
+  const cargo = (j.carg||[])[0] || {};
+  (cargo.agr||[]).forEach(a => (a.par||[]).forEach(p => (p.cand||[]).forEach(c => cands.push({
+    n:c.n, nome:c.nmu||c.nm, sg:p.sg, votos:+c.vap||0, p:parseFloat(String(c.pvapn||'0').replace(',','.')), eleito:c.e==='s', seq:+c.seq||0
+  }))));
+  cands.sort((a,b)=>a.seq-b.seq);               // cor fixa por candidato (ordem do registro)
+  cands.forEach((c,i)=>c.i=i);
+  const v = j.v||{}, s = j.s||{};
+  const tv = +v.tv||0;
+  return {
+    cands, pst:parseFloat(String(s.pstn||'0').replace(',','.')), ts:+s.ts||0, st:+s.st||0,
+    vv:+v.vv||0, vb:+v.vb||0, vn:+v.vn||0, tv, final:j.and==='f', dg:j.dg, hg:j.hg, idg:j.idg
+  };
+}
+
+async function load(uf){
+  if(backoff[uf] && Date.now()<backoff[uf]) return false;
+  const ctl = new AbortController(); const t = setTimeout(()=>ctl.abort(),10000);
+  try{
+    const r = await fetch(urlFor(uf),{cache:'no-store',signal:ctl.signal});
+    if(r.status===404){ backoff[uf]=Date.now()+60000; return uf==='br' ? 'nf' : false; }
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const j = await r.json();
+    if(lastIdg[uf]===j.idg && data[uf]) return false;   // sem novidade
+    lastIdg[uf]=j.idg; data[uf]=parse(j); return true;
+  }finally{ clearTimeout(t); }
+}
+
+async function refresh(){
+  const msg = $('msg'); msg.textContent='';
+  try{
+    const br = await load('br');
+    if(br==='nf'){ msg.textContent='Arquivo do Brasil ainda não disponível no TSE (404). Nova tentativa em instantes.'; setStatus(false,'Aguardando dados do TSE'); }
+    else{
+      const ufs = Object.keys(UFS).filter(u => !CFG.ufs || CFG.ufs.includes(u));
+      await Promise.all(ufs.map(u => load(u).catch(()=>false)));
+      setStatus(true);
+    }
+  }catch(e){
+    setStatus(false,'Falha ao buscar dados');
+    msg.textContent = 'Erro: '+e.message+'. Se for bloqueio de CORS, use um servidor local/proxy (veja PROXY no código).';
+  }
+  render();
+}
+
+function setStatus(ok,txt){
+  $('dot').className = 'dot'+(ok?'':' err');
+  const d = data.br;
+  $('upd').textContent = txt || (d ? `TSE: ${d.dg||''} ${d.hg||''} · verificado às ${new Date().toLocaleTimeString('pt-BR')}` : 'Carregando…');
+}
+
+function renderMap(){
+  const g = $('map'); g.innerHTML='';
+  Object.keys(UFS).forEach(uf=>{
+    const [c,r] = POS[uf];
+    const d = data[uf];
+    const b = document.createElement('button');
+    b.className = 'tile'+(selected===uf?' sel':'');
+    b.style.gridColumn=c; b.style.gridRow=r;
+    b.title = UFS[uf];
+    if(d && d.cands.length && d.vv>0){ const top=[...d.cands].sort((a,b)=>b.votos-a.votos)[0]; b.classList.add('lead'+(top.i%2)); }
+    b.innerHTML = `<b>${uf.toUpperCase()}</b><span>${d?pct(d.pst,1):'—'}</span>${d?`<i style="width:${d.pst}%"></i>`:''}`;
+    b.onclick = ()=>{ selected=uf; render(); };
+    g.appendChild(b);
+  });
+}
+
+function renderDetail(){
+  const el = $('detail'); const d = data[selected];
+  const nome = selected==='br' ? 'Brasil' : UFS[selected]+' ('+selected.toUpperCase()+')';
+  if(!d){ el.innerHTML = `<h2>${nome}</h2><p class="muted">Sem dados disponíveis ainda.</p>`; return; }
+  const cands = [...d.cands].sort((a,b)=>b.votos-a.votos);
+  el.innerHTML = `
+    <h2>${nome}</h2>
+    <div class="big">${pct(d.pst)} <span class="muted">das urnas apuradas</span></div>
+    <div class="prog"><div style="width:${d.pst}%"></div></div>
+    <div class="muted">${fmt(d.st)} de ${fmt(d.ts)} seções totalizadas${d.final?' · <b>Totalização final</b>':''}</div>
+    ${cands.map(c=>`
+      <div class="cand">
+        <div class="row"><div><span class="nm">${c.nome}</span>${c.eleito?'<span class="badge">ELEITO</span>':''}<div class="muted">${c.sg} · ${c.n}</div></div>
+        <div style="text-align:right"><div class="pc">${pct(c.p)}</div><div class="muted">${fmt(c.votos)} votos</div></div></div>
+        <div class="bar"><div style="width:${c.p}%;background:var(--c${c.i%2})"></div></div>
+      </div>`).join('')}
+    <div class="muted">Votos válidos: ${fmt(d.vv)} · Brancos: ${fmt(d.vb)}${d.tv?` (${pct(d.vb/d.tv*100)})`:''} · Nulos: ${fmt(d.vn)}${d.tv?` (${pct(d.vn/d.tv*100)})`:''}</div>`;
+}
+
+function render(){ renderMap(); renderDetail(); setStatus(!$('dot').classList.contains('err')); }
+
+$('brBtn').onclick = ()=>{ selected='br'; render(); };
+(function loop(){ refresh().finally(()=>setTimeout(loop, INTERVAL_MS)); })();
+</script>
+</body>
+</html>
